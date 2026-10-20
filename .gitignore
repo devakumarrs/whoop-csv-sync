@@ -1,0 +1,14 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.DS_Store
+
+# never commit personal data or credentials
+*.csv
+*.tmp
+config.json
+tokens.json

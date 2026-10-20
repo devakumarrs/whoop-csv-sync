@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "whoop-csv-sync"
+dynamic = ["version"]
+description = "Sync a daily WHOOP summary (sleep times, strength workouts) into a CSV for Excel, Sheets, or anything else."
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+
+[project.scripts]
+whoop-csv-sync = "whoop_csv_sync.cli:main"
+
+[tool.setuptools]
+packages = ["whoop_csv_sync"]
+
+[tool.setuptools.dynamic]
+version = { attr = "whoop_csv_sync.__version__" }
