@@ -44,8 +44,10 @@ def load_json(path):
 def save_private(path, data):
     HOME.mkdir(mode=0o700, exist_ok=True)
     tmp = path.with_suffix(".tmp")
-    tmp.write_text(json.dumps(data, indent=2))
-    os.chmod(tmp, 0o600)
+    tmp.unlink(missing_ok=True)
+    # Create the file owner-only from the start, so secrets are never briefly readable by others
+    with os.fdopen(os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+        f.write(json.dumps(data, indent=2))
     tmp.replace(path)
 
 
