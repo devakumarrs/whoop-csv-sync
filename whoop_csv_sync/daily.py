@@ -25,6 +25,19 @@ def asleep_ms(r):
     return sum(stages) if all(s is not None for s in stages) else None
 
 
+def day_sleep(records):
+    """(start, end, asleep ms) for one day's sleeps and naps, each given as (start, end, record).
+    Times come from the main sleep: the longest non-nap sleep, or the longest nap if there was no sleep.
+    Asleep ms adds up all of them. It's None until the main one is scored; other naps count once scored."""
+    if not records:
+        return None, None, None
+    others = sorted(records, key=lambda x: (not x[2].get("nap"), x[1] - x[0]))
+    start, end, main = others.pop()
+    main_ms = asleep_ms(main)
+    total = None if main_ms is None else main_ms + sum(asleep_ms(r) or 0 for _, _, r in others)
+    return start, end, total
+
+
 def week_start(today):
     """The first day of the week containing `today` (a Monday, unless WEEK_START says otherwise)."""
     return today - dt.timedelta(days=(today.weekday() - WEEK_START) % 7)
@@ -37,16 +50,15 @@ def window_start(today, weeks=WEEKS):
 
 
 def build_rows(sleeps, workouts, first_day, last_day):
-    """One row for every day from first_day to last_day. A sleep belongs to the day you woke up;
-    a workout belongs to the day it started. Naps are ignored."""
-    main = {}  # wake date -> (start, end, record), keeping the longest sleep if there are several
+    """One row for every day from first_day to last_day. A sleep or nap belongs to the day you woke up;
+    a workout belongs to the day it started. Bedtime and Wake come from the main sleep (see day_sleep);
+    Sleep Duration adds up everything you slept that day, naps included."""
+    by_day = defaultdict(list)  # wake date -> [(start, end, record)]
     for r in sleeps:
-        if r.get("nap") or not r.get("end"):  # no end yet = still asleep; the next run picks it up
+        if not r.get("end"):  # no end yet = still asleep; the next run picks it up
             continue
         start, end = local_time(r["start"], r.get("timezone_offset")), local_time(r["end"], r.get("timezone_offset"))
-        day = end.date()
-        if day not in main or end - start > main[day][1] - main[day][0]:
-            main[day] = (start, end, r)
+        by_day[end.date()].append((start, end, r))
     activity_ms = defaultdict(int)  # (start date, activity) -> total milliseconds
     for w in workouts:
         if not w.get("end"):
@@ -58,12 +70,12 @@ def build_rows(sleeps, workouts, first_day, last_day):
 
     rows, day = [], first_day
     while day <= last_day:
-        start, end, r = main.get(day, (None, None, None))
+        start, end, ms = day_sleep(by_day.get(day))
         row = {
             "Date": day.isoformat(),
             "Bedtime": start.strftime("%H:%M") if start else "",
             "Wake": end.strftime("%H:%M") if end else "",
-            "Sleep Duration": hm(asleep_ms(r)) if r else "",
+            "Sleep Duration": hm(ms),
         }
         for activity in ACTIVITIES:
             ms = activity_ms.get((day, activity))

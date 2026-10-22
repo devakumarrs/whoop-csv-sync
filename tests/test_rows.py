@@ -42,9 +42,36 @@ class DailyTests(unittest.TestCase):
     def test_one_row_per_day(self):
         self.assertEqual(list(self.rows([], [])), ["2026-10-18", "2026-10-19", "2026-10-20"])
 
-    def test_sleep_goes_on_wake_day_and_naps_are_ignored(self):
-        row = self.rows([SLEEP, NAP], [])["2026-10-19"]
-        self.assertEqual((row["Bedtime"], row["Wake"], row["Sleep Duration"]), ("22:45", "06:30", "7:00"))
+    def test_sleep_goes_on_wake_day_and_naps_add_to_duration(self):
+        row = self.rows([SLEEP, NAP], [])["2026-10-19"]  # 7:00 asleep + a nap scored at 7:00 = 14:00
+        self.assertEqual((row["Bedtime"], row["Wake"], row["Sleep Duration"]), ("22:45", "06:30", "14:00"))
+
+    def test_nap_only_day_uses_longest_nap_times_and_adds_up_naps(self):
+        short_nap = {**NAP, "id": "s-3", "start": "2026-10-19T16:00:00.000Z", "end": "2026-10-19T16:45:00.000Z",
+                     "score": {"stage_summary": {"total_light_sleep_time_milli": 1_800_000,
+                                                 "total_slow_wave_sleep_time_milli": 0,
+                                                 "total_rem_sleep_time_milli": 600_000}}}
+        row = self.rows([short_nap, NAP], [])["2026-10-19"]  # 1:00 nap wins over 0:45 nap; 7:00 + 0:40 asleep
+        self.assertEqual((row["Bedtime"], row["Wake"], row["Sleep Duration"]), ("13:00", "14:00", "7:40"))
+
+    def test_longer_nap_does_not_replace_main_sleep_times(self):
+        short_sleep = {**SLEEP, "start": "2026-10-19T05:00:00.000Z"}  # 1:30 in bed
+        long_nap = {**NAP, "start": "2026-10-19T12:00:00.000Z", "end": "2026-10-19T15:00:00.000Z"}
+        row = self.rows([long_nap, short_sleep], [])["2026-10-19"]
+        self.assertEqual((row["Bedtime"], row["Wake"]), ("05:00", "06:30"))
+
+    def test_longest_sleep_wins_when_there_are_several(self):
+        early = {**SLEEP, "id": "s-4", "start": "2026-10-19T01:00:00.000Z", "end": "2026-10-19T02:00:00.000Z"}
+        row = self.rows([early, SLEEP], [])["2026-10-19"]
+        self.assertEqual((row["Bedtime"], row["Wake"], row["Sleep Duration"]), ("22:45", "06:30", "14:00"))
+
+    def test_unscored_nap_only_day_has_times_but_no_duration(self):
+        row = self.rows([{**NAP, "score": None}], [])["2026-10-19"]
+        self.assertEqual((row["Bedtime"], row["Wake"], row["Sleep Duration"]), ("13:00", "14:00", ""))
+
+    def test_unscored_nap_is_not_counted_yet(self):
+        row = self.rows([SLEEP, {**NAP, "score": None}], [])["2026-10-19"]
+        self.assertEqual(row["Sleep Duration"], "7:00")
 
     def test_in_progress_records_are_skipped(self):
         rows = self.rows([{**SLEEP, "end": None}], [{**STRENGTH, "end": None}])

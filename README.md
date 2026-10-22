@@ -50,8 +50,8 @@ To change the run time, the number of weeks kept (`WEEKS`), the day your week st
 | Column | Meaning |
 |---|---|
 | `Date` | `YYYY-MM-DD` |
-| `Bedtime`, `Wake` | Local times (`HH:MM`) of that morning's main sleep. A sleep belongs to the day you woke up, and naps are ignored. Bedtimes after midnight show as early-morning times, such as `01:30`. |
-| `Sleep Duration` | Time actually asleep (`H:MM`, excluding time awake in bed). It stays blank until WHOOP scores the sleep. |
+| `Bedtime`, `Wake` | Local times (`HH:MM`) of that morning's main sleep. A sleep belongs to the day you woke up. On a day with only naps, these come from the longest nap. Bedtimes after midnight show as early-morning times, such as `01:30`. |
+| `Sleep Duration` | Total time actually asleep that day (`H:MM`, excluding time awake in bed): the main sleep plus any naps that ended that day. It stays blank until WHOOP scores the main sleep, and a nap is added once it's scored. On a day with only naps, it adds them up and is blank until the longest nap is scored. |
 | `Strength Workout`, `Walking`, `Running`, `Meditation` | `Yes` if you logged that activity that day (by local start date), otherwise `No` |
 | `… Time` (one per activity) | Total time across that day's sessions (`H:MM`), blank if none |
 
