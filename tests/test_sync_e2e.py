@@ -7,6 +7,7 @@ import datetime as dt
 import http.server
 import json
 import os
+import plistlib
 import shutil
 import subprocess
 import sys
@@ -17,7 +18,7 @@ import urllib.parse
 from pathlib import Path
 from unittest import mock
 
-from whoop_csv_sync import api
+from whoop_csv_sync import api, cli, scheduler
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -189,6 +190,52 @@ class RetryTests(unittest.TestCase):
             with self.assertRaises(api.ApiError):
                 api.get_json("http://x", "t")
         self.assertEqual(call.call_count, 1)
+
+
+class WaitForNetworkTests(unittest.TestCase):
+    def test_waits_until_dns_works(self):
+        lookups = [OSError("no wifi")] * 5 + [[("ok",)]]
+
+        def fake(*args):
+            r = lookups.pop(0)
+            if isinstance(r, Exception):
+                raise r
+            return r
+
+        with mock.patch.object(api.socket, "getaddrinfo", side_effect=fake), \
+                mock.patch.object(api.time, "sleep") as sleep:
+            self.assertTrue(api.wait_for_network())
+        self.assertEqual([c.args[0] for c in sleep.call_args_list], [api.NETWORK_FIRST_WAIT, 8, 16, 30, 30, 30])  # doubles, capped
+
+    def test_gives_up_after_timeout(self):
+        with mock.patch.object(api.socket, "getaddrinfo", side_effect=OSError("no wifi")), \
+                mock.patch.object(api.time, "sleep"):
+            self.assertFalse(api.wait_for_network(timeout=0))
+
+
+class ScheduledRunTests(unittest.TestCase):
+    """Only the daily job waits for Wi-Fi; a manual sync starts right away."""
+    def run_sync(self, scheduled):
+        with mock.patch.object(cli, "wait_for_network") as wait, \
+                mock.patch.object(cli, "load_config", return_value={}), \
+                mock.patch.object(cli.auth, "access_token", side_effect=RuntimeError("stop here")):
+            with self.assertRaisesRegex(RuntimeError, "stop here"):
+                cli._sync(2, scheduled)
+        return wait
+
+    def test_scheduled_run_waits_for_network(self):
+        self.run_sync(scheduled=True).assert_called_once()
+
+    def test_manual_run_does_not_wait(self):
+        self.run_sync(scheduled=False).assert_not_called()
+
+    def test_daily_job_passes_scheduled_flag(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(scheduler, "PLIST", Path(tmp) / "job.plist"), \
+                mock.patch.object(scheduler.subprocess, "run"):
+            scheduler.schedule()
+            args = plistlib.loads(scheduler.PLIST.read_bytes())["ProgramArguments"]
+        self.assertEqual(args[-2:], ["sync", "--scheduled"])
 
 
 if __name__ == "__main__":

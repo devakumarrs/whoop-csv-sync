@@ -29,7 +29,7 @@ def schedule():
     with open(PLIST, "wb") as f:
         plistlib.dump({
             "Label": LABEL,
-            "ProgramArguments": [stable_python(), "-m", "whoop_csv_sync", "sync"],
+            "ProgramArguments": [stable_python(), "-m", "whoop_csv_sync", "sync", "--scheduled"],
             "WorkingDirectory": str(PROJECT_ROOT),
             "StartCalendarInterval": [{"Hour": h, "Minute": m} for h, m in RUN_TIMES],
             "RunAtLoad": True,

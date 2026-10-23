@@ -2,6 +2,7 @@
 import datetime as dt
 import json
 import os
+import socket
 import time
 import urllib.error
 import urllib.parse
@@ -36,6 +37,32 @@ def form_request(url, fields):
     return urllib.request.Request(
         url, data=urllib.parse.urlencode(fields).encode(),
         headers={"Content-Type": "application/x-www-form-urlencoded"})
+
+
+NETWORK_WAIT = 180  # seconds to wait for the network before giving up (the first wait included)
+NETWORK_FIRST_WAIT = 10  # seconds before the first check
+NETWORK_RETRY_DELAY = 8  # seconds after a failed check; doubled each time, up to NETWORK_MAX_DELAY
+NETWORK_MAX_DELAY = 30
+
+
+def wait_for_network(timeout=NETWORK_WAIT):
+    """Wait until WHOOP's hostname resolves (scheduled runs only). The at-login and on-wake runs often start before
+    Wi-Fi has reconnected, and the first request (renewing the sign-in) would fail straight away.
+    Returns without raising on timeout; the request that follows then reports the real error."""
+    host = urllib.parse.urlparse(API).hostname
+    deadline = time.monotonic() + timeout
+    time.sleep(NETWORK_FIRST_WAIT)
+    delay = NETWORK_RETRY_DELAY
+    while True:
+        try:
+            socket.getaddrinfo(host, 443)
+            return True
+        except OSError:
+            left = deadline - time.monotonic()
+            if left <= 0:
+                return False
+            time.sleep(min(delay, left))
+            delay = min(delay * 2, NETWORK_MAX_DELAY)
 
 
 RETRY_STATUSES = {429, 500, 502, 503, 504}

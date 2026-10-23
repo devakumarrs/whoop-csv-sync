@@ -9,7 +9,7 @@ import sys
 from pathlib import Path
 
 from whoop_csv_sync import auth, csv_store, daily, scheduler
-from whoop_csv_sync.api import ApiError, fetch_all
+from whoop_csv_sync.api import ApiError, fetch_all, wait_for_network
 from whoop_csv_sync.config import (CONFIG, DEFAULT_OUTPUT_DIR, HOME, WEEKS, load_config, load_json, log,
                                save_private)
 
@@ -40,13 +40,15 @@ def run_lock():
                 msvcrt.locking(f.fileno(), msvcrt.LK_UNLCK, 1)
 
 
-def sync(weeks=WEEKS):
+def sync(weeks=WEEKS, scheduled=False):
     with run_lock():
-        _sync(weeks)
+        _sync(weeks, scheduled)
 
 
-def _sync(weeks):
+def _sync(weeks, scheduled=False):
     cfg = load_config()
+    if scheduled:  # the daily job often starts right after wake, before Wi-Fi is back
+        wait_for_network()
     token = auth.access_token(cfg)
     today = dt.date.today()
     first = daily.window_start(today, weeks)
@@ -124,6 +126,7 @@ def main():
     s.add_argument("--weeks", type=positive_int, default=WEEKS,
                    help=f"weeks to include this time, e.g. 4 after a trip (default {WEEKS}). "
                         "The next scheduled run goes back to the default.")
+    s.add_argument("--scheduled", action="store_true", help=argparse.SUPPRESS)  # set by the daily job
     sub.add_parser("schedule", help="run sync automatically every day (macOS launchd)")
     sub.add_parser("unschedule", help="stop the automatic runs")
     args = p.parse_args()
@@ -131,7 +134,7 @@ def main():
     commands = {
         "setup": setup,
         "login": lambda: auth.login(load_config()),
-        "sync": lambda: sync(args.weeks),
+        "sync": lambda: sync(args.weeks, args.scheduled),
         "schedule": schedule,
         "unschedule": unschedule,
     }
